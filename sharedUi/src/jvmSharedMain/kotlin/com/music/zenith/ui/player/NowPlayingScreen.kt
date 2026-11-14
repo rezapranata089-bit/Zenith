@@ -577,8 +577,12 @@ private fun dockFlyEase(t: Float): Float {
  * the first part of the drag, then rises and grows to the card together, on one curve.
  */
 private fun dockCardEase(t: Float): Float {
-    val holdUntil = 0.15f
-    return dockSmooth((t - holdUntil) / (1f - holdUntil))
+    // A short hold on the mini player's cover, then one quick curve for rising and growing
+    // together: half ease-out so it fills the panel early, half smoothstep so it still
+    // lands softly.
+    val x = ((t - 0.05f) / 0.95f).coerceIn(0f, 1f)
+    val out = 1f - (1f - x) * (1f - x)
+    return 0.5f * out + 0.5f * dockSmooth(x)
 }
 
 /**
@@ -3825,9 +3829,11 @@ fun NowPlayingScreen(
                             // the panel and then moves down to the card inside it. The banner
                             // keeps its straight line on screen.
                             val target = rect.translate(0f, if (heroMode) -unridden else 0f)
-                            val sheetTravel = dock?.sheetTravel ?: 0f
-                            val riding = if (heroMode || sheetTravel <= 0f) 0f else
-                                (dockFrame.offset - sheetTravel).coerceAtMost(0f) * (1f - p())
+                            // The panel's top rises from the pill's top edge, so that distance
+                            // (not the whole window's height) is how far the cover rides with it.
+                            val pillTravel = dock?.travel() ?: 0f
+                            val riding = if (heroMode || pillTravel <= 0f) 0f else
+                                (dockFrame.offset - pillTravel).coerceAtMost(0f) * (1f - p())
                             val start = mini.translate(0f, riding)
                             // Vertical position leads the size a little, so the cover climbs
                             // toward the panel's top-left instead of hanging low in it. The
