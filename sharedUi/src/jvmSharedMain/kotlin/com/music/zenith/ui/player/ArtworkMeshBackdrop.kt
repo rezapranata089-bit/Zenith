@@ -22,8 +22,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.LocalPlatformContext
@@ -541,6 +544,23 @@ private class SeamAlignedBlurPainter(
                 dstSize = IntSize(w.roundToInt(), (h - seamY).roundToInt().coerceAtLeast(1)),
                 filterQuality = FilterQuality.Low,
             )
+            // Mirror: the blurred cover is reflected across the seam, so the area
+            // below it continues the picture instead of a stretched colour band.
+            // Still the same live-blurred bitmap, so it follows the clip.
+            val mirrorH = minOf(h - seamY, coverH)
+            val mirrorSrcH = (mirrorH / scale).roundToInt().coerceIn(1, srcH)
+            clipRect(top = seamY) {
+                withTransform({ scale(1f, -1f, Offset(0f, seamY)) }) {
+                    drawImage(
+                        image = image,
+                        srcOffset = IntOffset(srcX, srcY + srcH - mirrorSrcH),
+                        srcSize = IntSize(srcW, mirrorSrcH),
+                        dstOffset = IntOffset(0, (seamY - mirrorH).roundToInt()),
+                        dstSize = IntSize(w.roundToInt(), mirrorH.roundToInt().coerceAtLeast(1)),
+                        filterQuality = FilterQuality.Low,
+                    )
+                }
+            }
         }
     }
 }
@@ -596,7 +616,10 @@ private fun boxBlurPass(
         var green = 0
         var blue = 0
         fun pixel(at: Int): Int {
-            val position = at.coerceIn(0, major - 1)
+            // Mirror at the edges instead of clamping, so the blur does not
+            // smear the outermost row/column of the cover.
+            val reflected = if (at < 0) -at - 1 else if (at >= major) 2 * major - 1 - at else at
+            val position = reflected.coerceIn(0, major - 1)
             return if (horizontal) source[fixed * width + position]
             else source[position * width + fixed]
         }
