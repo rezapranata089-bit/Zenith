@@ -237,7 +237,25 @@ fun FullArtworkBlurBackdrop(
         // Everything on this is white: the lyrics, the queue and the main
         // player's controls. Preserve the cover's colour and layout, but keep
         // bright sleeves from lowering contrast.
-        Canvas(Modifier.fillMaxSize()) { drawRect(brush = FullArtworkScrim) }
+        Canvas(Modifier.fillMaxSize()) {
+            val seamY = seam().coerceIn(0f, size.height)
+            if (seamY > 1f && seamY < size.height - 1f) {
+                // Clear around the seam so the sharp banner dissolves into an
+                // undarkened blur; the shade only deepens below it.
+                val f = seamY / size.height
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0f),
+                        f * 0.6f to Color.Black.copy(alpha = 0f),
+                        f to Color.Black.copy(alpha = 0.10f),
+                        (f + 1f) / 2f to Color.Black.copy(alpha = 0.28f),
+                        1f to Color.Black.copy(alpha = 0.44f),
+                    ),
+                )
+            } else {
+                drawRect(brush = FullArtworkScrim)
+            }
+        }
     }
 }
 
