@@ -3817,16 +3817,22 @@ fun NowPlayingScreen(
                             val open = dockT()
                             val base = if (heroMode) dockFlyEase(open) else dockCardEase(open)
                             val ease = base + (dockEaseThumb(open) - base) * p()
-                            val target = rect.translate(0f, -unridden)
+                            // Card cover: both ends ride the sheet, so the cover is lifted with
+                            // the panel and then moves down to the card inside it. The banner
+                            // keeps its straight line on screen.
+                            val target = rect.translate(0f, if (heroMode) -unridden else 0f)
+                            val riding = if (heroMode) 0f else
+                                -open * (dock?.travel() ?: 0f) * (1f - p())
+                            val start = mini.translate(0f, riding)
                             // Vertical position leads the size a little, so the cover climbs
                             // toward the panel's top-left instead of hanging low in it. The
                             // lead is zero at both ends, so it still leaves and lands exactly.
                             val lift = if (heroMode) 0.25f else 0f
                             val lifted = ease + (1f - ease) * ease * lift * (1f - p())
-                            val left = mini.left + (target.left - mini.left) * ease
-                            val right = mini.right + (target.right - mini.right) * ease
-                            val height = mini.height + (target.height - mini.height) * ease
-                            val top = mini.top + (target.top - mini.top) * lifted
+                            val left = start.left + (target.left - start.left) * ease
+                            val right = start.right + (target.right - start.right) * ease
+                            val height = start.height + (target.height - start.height) * ease
+                            val top = start.top + (target.top - start.top) * lifted
                             return Rect(left, top, right, top + height)
                         }
                         // The banner's dissolve, firmed up into the cover's hard edge as
