@@ -2236,6 +2236,11 @@ fun NowPlayingScreen(
     val stillUrl = stillClip?.url
     val stillSongKey = "${song.title}|${song.artist}"
     fun still(): CanvasStill? {
+        // While a mix or crossfade has the clip dimmed (and for the hold after it),
+        // the sleeve must show the real cover. Two songs can share one clip, and the
+        // held frame of the song that is leaving would then be drawn over the cover
+        // of the one that is arriving, with nothing left to dissolve into.
+        if (clipDimmed) return null
         val current = CanvasStills.current ?: return null
         if (stillUrl != null) return current.takeIf { it.url == stillUrl }
         // Player baru dibuka dan canvas-nya belum ditemukan: pakai frame terakhir
