@@ -509,6 +509,9 @@ private const val DOCK_FADE_FLOOR = 1f / 255f
 private const val CLIP_MIX_FADE_OUT_MS = 900
 private const val CLIP_MIX_FADE_IN_MS = 500
 
+/** Setelah mix/crossfade, klip lagu berikutnya ditahan sebentar supaya dissolve cover tuntas dulu. */
+private const val CLIP_MIX_HOLD_MS = 2_000
+
 
 
 /** Seberapa jauh drag (0..1 dari mini ke penuh) saat cover sudah selebar panel dan menutup sudutnya. */
@@ -1120,6 +1123,7 @@ fun NowPlayingScreen(
         targetValue = if (mixing || crossfading) 0f else 1f,
         animationSpec = tween(
             durationMillis = if (mixing || crossfading) CLIP_MIX_FADE_OUT_MS else CLIP_MIX_FADE_IN_MS,
+            delayMillis = if (mixing || crossfading) 0 else CLIP_MIX_HOLD_MS,
             easing = FastOutSlowInEasing,
         ),
         label = "clipMixFade",
@@ -2931,10 +2935,7 @@ fun NowPlayingScreen(
                             // Out of sight altogether while its still stands in for it.
                             presentationAlpha = {
                                 if (stillTakesOver() || (dockMoving && !clipFullscreen)) 0f
-                                else (1f - 2f * p()).coerceIn(0f, 1f) * dockFade() *
-                                    // Mixing from a playing clip: it fades with the dissolve itself,
-                                    // straight into the next cover, not into its own still first.
-                                    (if (dissolve.fromClip) 1f - dissolve.progress else clipMixFade.value)
+                                else (1f - 2f * p()).coerceIn(0f, 1f) * dockFade() * clipMixFade.value
                             },
                             // A full-screen Spotify Canvas holds its frame for a beat
                             // once the player has come all the way up, rather than
@@ -4216,9 +4217,6 @@ fun NowPlayingScreen(
                                         // pindah, lalu memudar (blur + zoom). Tanpa frame:
                                         // sapuan geser, kini dengan ekor memudar halus.
                                         alpha = when {
-                                            // The clip is what dissolves into the next cover here;
-                                            // the song's own still must not show in between.
-                                            dissolve.fromClip && sweeping -> 0f
                                             framed && sweeping -> 1f - t
                                             framed -> 1f
                                             sweeping && dissolve.fluid -> 1f
@@ -4352,11 +4350,7 @@ fun NowPlayingScreen(
                                             collapseStarted || dockMoving || overlayOpen.value,
                                         // The same stand-in as the banner's clip; here
                                         // the still is drawn by the sleeve around it.
-                                        presentationAlpha = {
-                                            if (stillTakesOver()) 0f
-                                            else if (dissolve.fromClip) 1f - dissolve.progress
-                                            else clipMixFade.value
-                                        },
+                                        presentationAlpha = { if (stillTakesOver()) 0f else clipMixFade.value },
                                         startPositionMs = stillStart?.positionMs ?: 0L,
                                         revealInstantly = stillStart != null,
                                         captureStill = stillMoving,
