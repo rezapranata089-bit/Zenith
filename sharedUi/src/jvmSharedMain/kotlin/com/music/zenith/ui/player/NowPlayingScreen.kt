@@ -577,12 +577,11 @@ private fun dockFlyEase(t: Float): Float {
  * the first part of the drag, then rises and grows to the card together, on one curve.
  */
 private fun dockCardEase(t: Float): Float {
-    // A short hold on the mini player's cover, then one quick curve for rising and growing
-    // together: half ease-out so it fills the panel early, half smoothstep so it still
-    // lands softly.
-    val x = ((t - 0.05f) / 0.95f).coerceIn(0f, 1f)
-    val out = 1f - (1f - x) * (1f - x)
-    return 0.5f * out + 0.5f * dockSmooth(x)
+    // A short hold on the mini player's cover, then one curve for sliding and growing
+    // together. Smootherstep: no slope and no curvature at either end, so it leaves the
+    // mini player and lands without a jolt, and it is done a little before the sheet is.
+    val x = ((t - 0.04f) / (0.88f - 0.04f)).coerceIn(0f, 1f)
+    return x * x * x * (x * (x * 6f - 15f) + 10f)
 }
 
 /**
@@ -3808,7 +3807,7 @@ fun NowPlayingScreen(
                                 val panel = dock.panelBounds(
                                     Size(playerBounds.width.toFloat(), playerBounds.height.toFloat()),
                                 )
-                                val openNow = dock.openFraction()
+                                val openNow = dockCardEase(dock.openFraction())
                                 val leftMargin = (kept.left - (panel.left - boxLeftPx)).coerceAtLeast(0f)
                                 leftMargin * dockSmooth(openNow / 0.15f) *
                                     (1f - dockSmooth((openNow - 0.75f) / 0.25f))
@@ -3863,7 +3862,13 @@ fun NowPlayingScreen(
                             val left = start.left + (target.left - start.left) * ease
                             val right = start.right + (target.right - start.right) * ease
                             val height = start.height + (target.height - start.height) * ease
-                            val top = start.top + (target.top - start.top) * lifted
+                            // A gentle bow downwards through the middle of the flight, zero at both
+                            // ends, so the card cover is not hugging the panel's top edge on its way
+                            // yet still lands exactly. Same curve as size and slide, so it stays in step.
+                            val bow = if (heroMode) 0f else {
+                                target.height * 0.10f * 4f * ease * (1f - ease) * (1f - p())
+                            }
+                            val top = start.top + (target.top - start.top) * lifted + bow
                             return Rect(left, top, right, top + height)
                         }
                         // The banner's dissolve, firmed up into the cover's hard edge as
