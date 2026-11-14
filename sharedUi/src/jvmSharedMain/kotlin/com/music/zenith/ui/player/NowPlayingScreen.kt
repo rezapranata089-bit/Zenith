@@ -2931,7 +2931,10 @@ fun NowPlayingScreen(
                             // Out of sight altogether while its still stands in for it.
                             presentationAlpha = {
                                 if (stillTakesOver() || (dockMoving && !clipFullscreen)) 0f
-                                else (1f - 2f * p()).coerceIn(0f, 1f) * dockFade() * clipMixFade.value
+                                else (1f - 2f * p()).coerceIn(0f, 1f) * dockFade() *
+                                    // Mixing from a playing clip: it fades with the dissolve itself,
+                                    // straight into the next cover, not into its own still first.
+                                    (if (dissolve.fromClip) 1f - dissolve.progress else clipMixFade.value)
                             },
                             // A full-screen Spotify Canvas holds its frame for a beat
                             // once the player has come all the way up, rather than
@@ -3821,8 +3824,9 @@ fun NowPlayingScreen(
                             // the panel and then moves down to the card inside it. The banner
                             // keeps its straight line on screen.
                             val target = rect.translate(0f, if (heroMode) -unridden else 0f)
-                            val riding = if (heroMode) 0f else
-                                -open * (dock?.travel() ?: 0f) * (1f - p())
+                            val sheetTravel = dock?.sheetTravel ?: 0f
+                            val riding = if (heroMode || sheetTravel <= 0f) 0f else
+                                (dockFrame.offset - sheetTravel).coerceAtMost(0f) * (1f - p())
                             val start = mini.translate(0f, riding)
                             // Vertical position leads the size a little, so the cover climbs
                             // toward the panel's top-left instead of hanging low in it. The
@@ -4212,6 +4216,9 @@ fun NowPlayingScreen(
                                         // pindah, lalu memudar (blur + zoom). Tanpa frame:
                                         // sapuan geser, kini dengan ekor memudar halus.
                                         alpha = when {
+                                            // The clip is what dissolves into the next cover here;
+                                            // the song's own still must not show in between.
+                                            dissolve.fromClip && sweeping -> 0f
                                             framed && sweeping -> 1f - t
                                             framed -> 1f
                                             sweeping && dissolve.fluid -> 1f
@@ -4345,7 +4352,11 @@ fun NowPlayingScreen(
                                             collapseStarted || dockMoving || overlayOpen.value,
                                         // The same stand-in as the banner's clip; here
                                         // the still is drawn by the sleeve around it.
-                                        presentationAlpha = { if (stillTakesOver()) 0f else clipMixFade.value },
+                                        presentationAlpha = {
+                                            if (stillTakesOver()) 0f
+                                            else if (dissolve.fromClip) 1f - dissolve.progress
+                                            else clipMixFade.value
+                                        },
                                         startPositionMs = stillStart?.positionMs ?: 0L,
                                         revealInstantly = stillStart != null,
                                         captureStill = stillMoving,
