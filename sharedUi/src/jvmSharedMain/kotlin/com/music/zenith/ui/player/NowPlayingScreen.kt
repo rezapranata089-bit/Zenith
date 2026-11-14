@@ -3798,7 +3798,22 @@ fun NowPlayingScreen(
                                 val over = rect.bottom + gap - panelBottom
                                 if (over > 0f) rect.translate(0f, -over) else rect
                             }
-                            val minTop = bannerTopPx.toFloat()
+                            // Card cover: a top margin equal to its own left margin from the
+                            // panel's top edge while the panel opens, so it sits neither on the
+                            // top nor on the left. Eased in off the mini player's cover and out
+                            // again before landing, so it still arrives exactly on its place.
+                            val topMargin = if (dock == null || heroMode || playerBounds.height <= 0) {
+                                0f
+                            } else {
+                                val panel = dock.panelBounds(
+                                    Size(playerBounds.width.toFloat(), playerBounds.height.toFloat()),
+                                )
+                                val openNow = dock.openFraction()
+                                val leftMargin = (kept.left - (panel.left - boxLeftPx)).coerceAtLeast(0f)
+                                leftMargin * dockSmooth(openNow / 0.15f) *
+                                    (1f - dockSmooth((openNow - 0.75f) / 0.25f))
+                            }
+                            val minTop = bannerTopPx.toFloat() + topMargin
                             val minLeft = -boxLeftPx.toFloat()
                             val maxRight = (playerBounds.width - boxLeftPx).toFloat()
                             val dy = if (kept.top < minTop) minTop - kept.top else 0f
