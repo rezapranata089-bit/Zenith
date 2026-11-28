@@ -41,8 +41,8 @@ buildscript {
  * No "v" in the name — the in-app updater reads it as a number; the "v" is the
  * release tag's alone.
  */
-extra["zenithVersionCode"] = 43
-extra["zenithVersionName"] = "16.0.0"
+extra["zenithVersionCode"] = 44
+extra["zenithVersionName"] = "16.1.0"
 
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
