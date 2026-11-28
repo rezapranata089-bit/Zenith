@@ -63,7 +63,7 @@ async function track(req) {
     if (seenToday.ids.has(id)) return;
     seenToday.ids.add(id);
     const token = await googleToken();
-    await fetch("https://firestore.googleapis.com/v1/" + DOCS + ":commit", {
+    const sent = await fetch("https://firestore.googleapis.com/v1/" + DOCS + ":commit", {
       method: "POST",
       headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -90,8 +90,12 @@ async function track(req) {
       }),
       signal: AbortSignal.timeout(8000)
     });
+    if (!sent.ok && sent.status !== 409) {
+      console.error("track failed", sent.status, (await sent.text()).slice(0, 300));
+    }
   } catch (error) {
     // Counting must never break the API; a 409 just means already counted today.
+    console.error("track error", String(error.message || error));
   }
 }
 
