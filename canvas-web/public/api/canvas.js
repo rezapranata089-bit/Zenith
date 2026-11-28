@@ -6,99 +6,6 @@ const CACHE_MS = 60 * 1000;
 const MAX_SKEW_SECONDS = 12 * 60 * 60;
 const cache = { items: null, at: 0 };
 
-const DOCS = "projects/" + PROJECT_ID + "/databases/(default)/documents";
-const tokenCache = { value: "", exp: 0 };
-const seenToday = { day: "", ids: new Set() };
-
-function b64u(obj) {
-  return Buffer.from(JSON.stringify(obj)).toString("base64url");
-}
-
-async function googleToken() {
-  const now = Math.floor(Date.now() / 1000);
-  if (tokenCache.value && tokenCache.exp - 60 > now) return tokenCache.value;
-  const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  const head = b64u({ alg: "RS256", typ: "JWT" });
-  const claim = b64u({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/datastore",
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600
-  });
-  const sig = crypto.createSign("RSA-SHA256").update(head + "." + claim).sign(sa.private_key).toString("base64url");
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: head + "." + claim + "." + sig
-    }),
-    signal: AbortSignal.timeout(8000)
-  });
-  const json = await res.json();
-  if (!res.ok || !json.access_token) throw new Error("google token " + res.status);
-  tokenCache.value = json.access_token;
-  tokenCache.exp = now + (json.expires_in || 3600);
-  return tokenCache.value;
-}
-
-// Counts each visitor once per UTC day and per country in Firestore:
-// stats/YYYY-MM-DD { users, c_ID, c_US, ... }. Only a salted hash is kept, never the IP.
-async function track(req) {
-  try {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) return;
-    const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-    const ip = forwarded || String(req.headers["x-real-ip"] || "") || "unknown";
-    const raw = String(req.headers["x-vercel-ip-country"] || "");
-    const country = /^[A-Za-z]{2}$/.test(raw) ? raw.toUpperCase() : "XX";
-    const day = new Date().toISOString().slice(0, 10);
-    const id = crypto.createHash("sha256")
-      .update(day + "|" + ip + "|" + (process.env.CANVAS_SECRET || "zenith"))
-      .digest("hex").slice(0, 24);
-    if (seenToday.day !== day || seenToday.ids.size > 20000) {
-      seenToday.day = day;
-      seenToday.ids.clear();
-    }
-    if (seenToday.ids.has(id)) return;
-    seenToday.ids.add(id);
-    const token = await googleToken();
-    const sent = await fetch("https://firestore.googleapis.com/v1/" + DOCS + ":commit", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        writes: [
-          {
-            update: {
-              name: DOCS + "/statUsers/" + day + "_" + id,
-              fields: {
-                day: { stringValue: day },
-                country: { stringValue: country }
-              }
-            },
-            currentDocument: { exists: false }
-          },
-          {
-            update: { name: DOCS + "/stats/" + day, fields: {} },
-            updateMask: { fieldPaths: [] },
-            updateTransforms: [
-              { fieldPath: "users", increment: { integerValue: "1" } },
-              { fieldPath: "c_" + country, increment: { integerValue: "1" } }
-            ]
-          }
-        ]
-      }),
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!sent.ok && sent.status !== 409) {
-      console.error("track failed", sent.status, (await sent.text()).slice(0, 300));
-    }
-  } catch (error) {
-    // Counting must never break the API; a 409 just means already counted today.
-    console.error("track error", String(error.message || error));
-  }
-}
-
 function authorized(req) {
   const secret = process.env.CANVAS_SECRET;
   if (!secret) return true;
@@ -185,7 +92,6 @@ module.exports = async (req, res) => {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
-  const tracked = track(req);
   try {
     if (!cache.items || Date.now() - cache.at > CACHE_MS) {
       const [own, old] = await Promise.all([loadOwn(), loadOld()]);
@@ -194,7 +100,6 @@ module.exports = async (req, res) => {
       cache.at = Date.now();
     }
     const items = cache.items;
-    await tracked;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Access-Control-Allow-Origin", "*");
